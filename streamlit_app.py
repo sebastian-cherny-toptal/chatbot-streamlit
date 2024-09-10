@@ -97,10 +97,14 @@ else:
                 response_data = response.json()
                 if response.status_code == 200:
                     image_url = response_data['data'][0]['url']
+                    with st.chat_message("assistant"):
+                        st.markdown(f"Generated image: {image_url}")
                     response = requests.get(image_url)
                     if response.status_code == 200:
                         # Step 2: Convert the image content to base64
                         image_base64 = b64encode(response.content).decode('utf-8')
+                        with st.chat_message("assistant"):
+                            st.markdown(f"Got base64")
                         image = image_base64
                 if image is not None:
                     response = image
