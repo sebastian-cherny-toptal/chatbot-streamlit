@@ -23,8 +23,8 @@ aws_secret_access_key = st.text_input("AWS_SECRET_ACCESS_KEY", type="password")
 aws_session_token = st.text_input("AWS_SESSION_TOKEN", type="password")
 openai_apikey = st.text_input("OPENAI_API_KEY", type="password")
 
-if not (aws_access_key_id and aws_secret_access_key and aws_session_token):
-    st.info("Please add the AWS credentials.", icon="🗝️")
+if not (aws_access_key_id and aws_secret_access_key and aws_session_token) and not openai_apikey:
+    st.info("Please add the AWS credentials or the openai_apikey for DALL-E.", icon="🗝️")
 else:
     # Create a session state variable to store the chat messages. This ensures that the
     # messages persist across reruns.
