@@ -5,6 +5,7 @@ import json
 from base64 import b64decode, b64encode
 # from langchain_openai import ChatOpenAI
 import requests
+import uuid
 
 
 # Show title and description.
@@ -33,14 +34,17 @@ else:
     # Display the existing chat messages via `st.chat_message`.
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            if "markdown" in message:
+                st.markdown(message["markdown"])
+            if "image_file_path" in message:
+                st.image(message["image_file_path"], use_column_width=True)
 
     # Create a chat input field to allow the user to enter a message. This will display
     # automatically at the bottom of the page.
     if prompt := st.chat_input("What do you want to draw? (For example, 'A wizard octopus in the forest conjuring a spell')"):
 
         # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append({"role": "user", "markdown": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
         payload = {
@@ -55,7 +59,7 @@ else:
             stream = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": m["role"], "content": m["content"]}
+                    {"role": m["role"], "content": m["markdown"] if "markdown" in m else m["image_file_path"]}
                     for m in st.session_state.messages
                 ],
                 stream=True,
@@ -65,7 +69,9 @@ else:
             # session state.
             with st.chat_message("assistant"):
                 response = st.write_stream(stream)
+            st.session_state.messages.append({"role": "assistant", "markdown": response})
         else:
+            file_path = None
             try:
                 session = boto3.session.Session(
                     aws_access_key_id=aws_access_key_id,
@@ -75,13 +81,17 @@ else:
                 sm_runtime = session.client("sagemaker-runtime", region_name="us-east-1")
                 response = sm_runtime.invoke_endpoint(
                     EndpointName="my-super-octoai-sdxl",
-                    ContentType="application/json", Body=json.dumps(payload))
-                response_json = json.loads(response["Body"].read().decode())
-                decoded_image = b64decode(response_json["images"][0]["image_b64"])
+                    ContentType="application/json", Body=json.dumps(payload)
+                )
+                file_path = "/tmp/img-{}.png".format(str(uuid.uuid4()))
+                with open(file_path, 'wb') as f:
+                    f.write(response["Body"].read().decode())
+                #response_json = json.loads(response["Body"].read().decode())
+                #decoded_image = b64decode(response_json["images"][0]["image_b64"])
             except Exception as e:
-                with st.chat_message("assistant"):
-                    st.markdown(f"An error occurred: {e}")
-                    st.markdown(f"Will send it to DALL-E instead.")
+                # with st.chat_message("assistant"):
+                #     st.markdown(f"An error occurred: {e}")
+                #     st.markdown(f"Will send it to DALL-E instead.")
                 url = "https://api.openai.com/v1/images/generations"
                 headers = {
                     "Authorization": f"Bearer {openai_apikey}",
@@ -97,22 +107,14 @@ else:
                 response_data = response.json()
                 if response.status_code == 200:
                     image_url = response_data['data'][0]['url']
-                    with st.chat_message("assistant"):
-                        st.markdown(f"Generated image: {image_url}")
                     response = requests.get(image_url)
                     if response.status_code == 200:
-                        # Step 2: Convert the image content to base64
-                        # image_base64 = b64encode(response.content).decode('utf-8')
-                        # with st.chat_message("assistant"):
-                        #     st.markdown(f"Got base64")
-                        file_path = "/tmp/sample.png"
+                        file_path = "/tmp/img-{}.png".format(str(uuid.uuid4()))
                         with open(file_path, 'wb') as f:
                             f.write(response.content)
-                        with st.chat_message("assistant"):
-                            st.markdown("Saved image!")
-                            st.image(file_path, use_column_width=True)
-                if image is not None:
-                    response = image
-                    with st.chat_message("assistant"):
-                        st.image(image, use_column_width=True)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            if file_path is not None:
+                with st.chat_message("assistant"):
+                    st.markdown("Saved image!")
+                    st.image(file_path, use_column_width=True)
+                st.session_state.messages.append({"role": "assistant", "image_file_path": file_path})
+
