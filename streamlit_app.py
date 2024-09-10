@@ -2,8 +2,10 @@ import streamlit as st
 from openai import OpenAI
 import boto3
 import json
-from base64 import b64decode
-from langchain_openai import ChatOpenAI
+from base64 import b64decode, b64encode
+# from langchain_openai import ChatOpenAI
+import requests
+
 
 # Show title and description.
 st.title("💬 Chatbot with Octo")
@@ -18,6 +20,7 @@ st.write(
 aws_access_key_id = st.text_input("AWS_ACCESS_KEY_ID", type="password")
 aws_secret_access_key = st.text_input("AWS_SECRET_ACCESS_KEY", type="password")
 aws_session_token = st.text_input("AWS_SESSION_TOKEN", type="password")
+openai_apikey = st.text_input("OPENAI_API_KEY", type="password")
 
 if not (aws_access_key_id and aws_secret_access_key and aws_session_token):
     st.info("Please add the AWS credentials.", icon="🗝️")
@@ -34,7 +37,7 @@ else:
 
     # Create a chat input field to allow the user to enter a message. This will display
     # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+    if prompt := st.chat_input("What do you want to draw? (For example, 'A wizard octopus in the forest conjuring a spell')"):
 
         # Store and display the current prompt.
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -63,18 +66,44 @@ else:
             with st.chat_message("assistant"):
                 response = st.write_stream(stream)
         else:
-            session = boto3.session.Session(
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                aws_session_token=aws_session_token,
-            )
-            sm_runtime = session.client("sagemaker-runtime", region_name="us-east-1")
-            response = sm_runtime.invoke_endpoint(
-                EndpointName="my-super-octoai-sdxl",
-                ContentType="application/json", Body=json.dumps(payload))
-            response_json = json.loads(response["Body"].read().decode())
-            decoded_image = b64decode(response_json["images"][0]["image_b64"])
-            with open('img.jpg','wb') as f:
-                f.write(decoded_image)
-            response = decoded_image
+            try:
+                session = boto3.session.Session(
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    aws_session_token=aws_session_token,
+                )
+                sm_runtime = session.client("sagemaker-runtime", region_name="us-east-1")
+                response = sm_runtime.invoke_endpoint(
+                    EndpointName="my-super-octoai-sdxl",
+                    ContentType="application/json", Body=json.dumps(payload))
+                response_json = json.loads(response["Body"].read().decode())
+                decoded_image = b64decode(response_json["images"][0]["image_b64"])
+            except Exception as e:
+                with st.chat_message("assistant"):
+                    st.markdown(f"An error occurred: {e}")
+                    st.markdown(f"Will send it to DALL-E instead.")
+                url = "https://api.openai.com/v1/images/generations"
+                headers = {
+                    "Authorization": f"Bearer {openai_apikey}",
+                    "Content-Type": "application/json"
+                }
+                data = {
+                    "prompt": prompt,
+                    "n": 1,
+                    "size": "1024x1024"
+                }
+                image = None
+                response = requests.post(url, headers=headers, json=data)
+                response_data = response.json()
+                if response.status_code == 200:
+                    image_url = response_data['data'][0]['url']
+                    response = requests.get(image_url)
+                    if response.status_code == 200:
+                        # Step 2: Convert the image content to base64
+                        image_base64 = b64encode(response.content).decode('utf-8')
+                        image = image_base64
+                if image is not None:
+                    response = image
+                    with st.chat_message("assistant"):
+                        st.image(image, use_column_width=True)
         st.session_state.messages.append({"role": "assistant", "content": response})

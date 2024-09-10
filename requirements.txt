@@ -1,4 +1,5 @@
 streamlit
 openai
 boto3
-langchain-openai
+# langchain-openai
+requests
