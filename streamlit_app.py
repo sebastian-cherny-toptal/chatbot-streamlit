@@ -102,10 +102,15 @@ else:
                     response = requests.get(image_url)
                     if response.status_code == 200:
                         # Step 2: Convert the image content to base64
-                        image_base64 = b64encode(response.content).decode('utf-8')
+                        # image_base64 = b64encode(response.content).decode('utf-8')
+                        # with st.chat_message("assistant"):
+                        #     st.markdown(f"Got base64")
+                        file_path = "/tmp/sample.png"
+                        with open(file_path, 'wb') as f:
+                            f.write(response.content)
                         with st.chat_message("assistant"):
-                            st.markdown(f"Got base64")
-                        image = image_base64
+                            st.markdown("Saved image!")
+                            st.image(file_path, use_column_width=True)
                 if image is not None:
                     response = image
                     with st.chat_message("assistant"):
