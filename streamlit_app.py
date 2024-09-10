@@ -114,7 +114,6 @@ else:
                             f.write(response.content)
             if file_path is not None:
                 with st.chat_message("assistant"):
-                    st.markdown("Saved image!")
                     st.image(file_path, use_column_width=True)
                 st.session_state.messages.append({"role": "assistant", "image_file_path": file_path})
 
